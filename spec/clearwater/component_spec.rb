@@ -6,9 +6,9 @@ module Clearwater
     let(:component) { Class.new { include Clearwater::Component }.new }
 
     it 'generates html' do
-      html = component.div({ id: 'foo', class_name: 'bar' }, [
-        component.p("baz"),
-      ]).to_s
+      html = component.div(id: 'foo', class_name: 'bar') do
+        p { 'baz' }
+      end
 
       expect(html).to eq('<div id="foo" class="bar"><p>baz</p></div>')
     end
@@ -18,34 +18,35 @@ module Clearwater
         include Clearwater::Component
 
         def render
-          [ div({}, "1"), div({}, "2") ]
+          div { "1" }
+          div { "2" }
         end
       end
       expect(component_class.new.to_s).to eq('<div>1</div><div>2</div>')
     end
 
     it 'converts styles into strings' do
-      html = component.div({
+      html = component.div(
         style: {
           font_size: '24px',
-          padding: '3px',
+          padding: '3px'
         }
-      }, "Hello world!").to_s
+      ) { 'Hello world!' }
 
       expect(html).to eq('<div style="font-size:24px;padding:3px">Hello world!</div>')
     end
 
     it 'removes DOMReference attributes' do
-      html = component.div({
-        ref: DOMReference.new,
-      }, 'Hello World!').to_s
+      html = component.div(ref: DOMReference.new) { 'Hello World!' }.to_s
 
       expect(html).to eq('<div>Hello World!</div>')
     end
 
     describe 'content sanitization' do
       it 'sanitizes content strings, but not elements' do
-        html = component.div(component.p('<em>hi</em>')).to_s
+        html = component.div do
+          p { '<em>hi</em>' }
+        end.to_s
 
         expect(html).to eq '<div><p>&lt;em>hi&lt;/em></p></div>'
       end

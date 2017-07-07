@@ -9,7 +9,7 @@ module Clearwater
         include Clearwater::BlackBoxNode
 
         def node
-          Clearwater::Component.div({ id: 'foo' }, 'hi')
+          Clearwater::Component.div(id: 'foo') { 'hi' }
         end
       end.new
     }

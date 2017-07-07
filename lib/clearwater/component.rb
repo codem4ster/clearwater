@@ -7,94 +7,99 @@ module Clearwater
 
     attr_accessor :outlet
     attr_accessor :router
-
-    def render
+    attr_writer :html_text
+    def html_text
+      @html_text ||= []
     end
+
+    def buffer
+      @buffer ||= []
+    end
+
+    def plain(text)
+      html_text << text
+    end
+
+    def render; end
+
+    def self.included(includer)
+      define_method :to_s do
+        includer.new.render
+      end
+    end
+
 
     HTML_TAGS.each do |tag_name|
-      define_method tag_name do |attributes=nil, content=nil|
-        tag(tag_name, attributes, content)
+      define_method tag_name do |attributes = nil, &content|
+        tag(tag_name, attributes, &content)
       end
     end
 
-    def tag tag_name, attributes=nil, content=nil
-      unless attributes.nil? || attributes.is_a?(Hash)
-        content = attributes
-        attributes = nil
-      end
-
-      Tag.new(tag_name, attributes, content)
+    def join_tags(tags)
+      return tags if tags.is_a? String
+      tag_text = tags.join
+      tag_text.respond_to?(:html_safe) ? tag_text.html_safe : tag_text
     end
 
-    def to_s
-      html = Array(render).join
-      html.respond_to?(:html_safe) ? html.html_safe : html
+    def eval_content(&content)
+      result = instance_eval(&content)
+      return if html_text == join_tags(result)
+      buffer << result.gsub('<', '&lt;') if result.is_a? String
+      buffer.concat result if result.is_a? Array
+      @html_text = [html_text] if html_text.is_a? String
+      html_text.concat buffer
+      @buffer = []
+    end
+
+    def build_style(attributes)
+      return attributes unless attributes[:style].is_a? Hash
+      attributes[:style] = attributes[:style].map do |attr, value|
+        attr = attr.to_s.tr('_', '-')
+        "#{attr}:#{value}"
+      end.join(';')
+      attributes
+    end
+
+    def check_class_name(attributes)
+      map = %i[class_name className]
+      found = map.find { |cls_name| attributes.key?(cls_name) }
+      return attributes unless found
+      attributes[:class] ||= attributes.delete(found)
+      attributes
+    end
+
+    def build_attributes(attributes)
+      return attributes unless attributes.is_a? Hash
+
+      attributes = check_class_name attributes
+      attributes = build_style attributes
+
+      attributes.reject! do |key, handler|
+        key[0, 2] == 'on' || handler.is_a?(DOMReference)
+      end
+
+      attributes.map do |key, value|
+        next " #{key}" if value.eql? true
+        value = '"' + value + '"'
+        ' ' + [key, value].join('=')
+      end.join
+    end
+
+    def tag(tag_name, attributes = nil, &content)
+      start_tag = "<#{tag_name}#{build_attributes(attributes)}"
+      start_tag += block_given? ? '>' : '/>'
+      html_text << start_tag
+      if block_given?
+        eval_content(&content)
+        html_text << "</#{tag_name}>"
+      end
+      @html_text = join_tags html_text
     end
 
     def params
       router.params_for_path(router.current_path)
     end
 
-    def call &block
-    end
-
-    class Tag
-      def initialize tag_name, attributes=nil, content=nil
-        @tag_name = tag_name
-        @attributes = sanitize_attributes(attributes)
-        @content = content
-      end
-
-      def to_html
-        html = "<#{@tag_name}"
-        if @attributes
-          @attributes.each do |attr, value|
-            html << " #{attr}=#{value.to_s.inspect}"
-          end
-        end
-        if @content
-          html << '>'
-          html << sanitize_content(@content)
-          html << "</#{@tag_name}>"
-        else
-          html << '/>'
-        end
-
-        html
-      end
-      alias to_s to_html
-
-      def sanitize_attributes attributes
-        return attributes unless attributes.is_a? Hash
-
-        if attributes.key? :class_name or attributes.key? :className
-          attributes[:class] ||= attributes.delete(:class_name) || attributes.delete(:className)
-        end
-
-        if Hash === attributes[:style]
-          attributes[:style] = attributes[:style].map { |attr, value|
-            attr = attr.to_s.tr('_', '-')
-            "#{attr}:#{value}"
-          }.join(';')
-        end
-
-        attributes.reject! do |key, handler|
-          key[0, 2] == 'on' || DOMReference === handler
-        end
-
-        attributes
-      end
-
-      def sanitize_content content
-        case content
-        when Array
-          content.map { |c| sanitize_content c }.join
-        when String
-          content.gsub('<', '&lt;')
-        else
-          content.to_s
-        end
-      end
-    end
+    def call(&block); end
   end
 end
