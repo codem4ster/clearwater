@@ -12,12 +12,16 @@ module Clearwater
       @html_text ||= []
     end
 
-    def buffer
-      @buffer ||= []
+    def sub_buffer
+      @sub_buffer ||= []
     end
 
     def plain(text)
       html_text << text
+    end
+
+    def render_component(comp)
+      html_text << comp.render
     end
 
     def render; end
@@ -36,19 +40,18 @@ module Clearwater
     end
 
     def join_tags(tags)
-      return tags if tags.is_a? String
-      tag_text = tags.join
-      tag_text.respond_to?(:html_safe) ? tag_text.html_safe : tag_text
+      return tags.join if tags.kind_of? Array
+      tags
     end
 
     def eval_content(&content)
       result = instance_eval(&content)
       return if html_text == join_tags(result)
-      buffer << result.gsub('<', '&lt;') if result.is_a? String
-      buffer.concat result if result.is_a? Array
+      sub_buffer << result if result.is_a? String
+      sub_buffer.concat result if result.is_a? Array
       @html_text = [html_text] if html_text.is_a? String
-      html_text.concat buffer
-      @buffer = []
+      html_text.concat sub_buffer
+      @sub_buffer = []
     end
 
     def build_style(attributes)
